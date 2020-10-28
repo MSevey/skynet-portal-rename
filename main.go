@@ -36,8 +36,16 @@ func copyFile(oldPath, newPath string) error {
 // deleteEmptyDirs will walk the filesystem and delete an empty directories. It
 // will delete them recursively, so if one deletion creates a new empty
 // directory, then that directory should be deleted as well.
+//
+// NOTE: a directory that only contains a .siadir file is considered empty
 func deleteEmptyDirs(root string) error {
 	return filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
+		// Check if fi is nil, this happens when the .siadir is deleted from the
+		// directory and walk expects to visit it next
+		if fi == nil {
+			return nil
+		}
+		// Ignore files
 		if !fi.IsDir() {
 			return nil
 		}
@@ -91,8 +99,20 @@ func recurviseDelete(path string) error {
 			return errors.AddContext(err, fmt.Sprintf("unable to read dir %s", path))
 		}
 		// If the dir is not empty we return
-		if len(fileinfos) != 0 {
+		if len(fileinfos) > 1 {
 			return nil
+		}
+		if len(fileinfos) == 1 {
+			fi := fileinfos[0]
+			if fi.Name() != ".siadir" {
+				return nil
+			}
+			siadir := filepath.Join(path, fi.Name())
+			// Attempt to delete the .siadir file
+			err = os.Remove(siadir)
+			if err != nil && !os.IsNotExist(err) {
+				return errors.AddContext(err, fmt.Sprintf("unable to remove siadir %s", siadir))
+			}
 		}
 
 		// Delete empty directory

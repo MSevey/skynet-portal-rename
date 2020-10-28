@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -154,6 +152,10 @@ func TestRenameAllAndDelete(t *testing.T) {
 		filepath.Join(fileDir, "a/a/a/file.sia"),
 		filepath.Join(fileDir, "/as/as/as/as/as/file.sia"),
 	}
+	siadirs := []string{
+		filepath.Join(fileDir, "a/.siadir"),
+		filepath.Join(fileDir, "a/a/a/.siadir"),
+	}
 	goodFile := filepath.Join(fileDir, "bb/bb/bb/file.sia")
 	err := os.MkdirAll(filepath.Dir(goodFile), persist.DefaultDiskPermissionsTest)
 	if err != nil {
@@ -169,6 +171,16 @@ func TestRenameAllAndDelete(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = os.Create(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, siadir := range siadirs {
+		err = os.MkdirAll(filepath.Dir(siadir), persist.DefaultDiskPermissionsTest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = os.Create(siadir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -218,18 +230,10 @@ func TestRenameAllAndDelete(t *testing.T) {
 			t.Fatal(err, dir)
 		}
 	}
-	err = f.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	f, err = os.Open(dirFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Check the dir path file
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		fmt.Println(scanner.Text())
+	for _, siadir := range siadirs {
+		_, err = os.Stat(siadir)
+		if !os.IsNotExist(err) {
+			t.Fatal(err, siadir)
+		}
 	}
 }
