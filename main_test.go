@@ -2,16 +2,20 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/modules/renter/filesystem/siadir"
 	"gitlab.com/NebulousLabs/Sia/persist"
 	"gitlab.com/NebulousLabs/fastrand"
 )
 
+// tempDir creates a temporary directory for testing
 func tempDir(name string) string {
 	path := filepath.Join(os.TempDir(), name)
 	err := os.RemoveAll(path)
@@ -25,8 +29,12 @@ func tempDir(name string) string {
 	return path
 }
 
+// TestCopyFile tests the copy
 func TestCopyFile(t *testing.T) {
+	// Create the temp dir for the test
 	testDir := tempDir(t.Name())
+
+	// Create a file and write data to it
 	name := filepath.Join(testDir, "testfile.dat")
 	f, err := os.Create(name)
 	if err != nil {
@@ -41,11 +49,15 @@ func TestCopyFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Copy file to a new destination
 	newname := filepath.Join(testDir, "newname.dat")
 	err = copyFile(name, newname)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Read file at new destination and verify data
 	newData, err := ioutil.ReadFile(newname)
 	if err != nil {
 		t.Fatal(err)
@@ -55,6 +67,8 @@ func TestCopyFile(t *testing.T) {
 	}
 }
 
+// TestRandomName tests the random name generation satisfies the
+// validDirStructure
 func TestRandomName(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		if !validDirStructure(randomName()) {
@@ -63,6 +77,7 @@ func TestRandomName(t *testing.T) {
 	}
 }
 
+// TestRecursiveDelete tests the recursive deletion
 func TestRecursiveDelete(t *testing.T) {
 	// Create directory tree
 	testDir := tempDir(t.Name())
@@ -71,6 +86,8 @@ func TestRecursiveDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Delete the directory tree and verify it is removed from disk
 	err = recurviseDelete(path)
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +113,9 @@ func TestRecursiveDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Delete the directory tree and verify that only the expected directories
+	// were deleted
 	err = recurviseDelete(path)
 	if err != nil {
 		t.Fatal(err)
@@ -115,6 +135,7 @@ func TestRecursiveDelete(t *testing.T) {
 	}
 }
 
+// TestValidDirStructure tests the validDirStructure function
 func TestValidDirStructure(t *testing.T) {
 	var tests = []struct {
 		path  string
@@ -138,7 +159,10 @@ func TestValidDirStructure(t *testing.T) {
 	}
 }
 
+// TestRenameAllAndDelete tests the full implementation of renaming an entire
+// directory system and deleting the empty directories
 func TestRenameAllAndDelete(t *testing.T) {
+	// Create a testing directory and directory system
 	testDir := tempDir(t.Name())
 	fileDir := filepath.Join(testDir, "files")
 	files := []string{
@@ -235,5 +259,102 @@ func TestRenameAllAndDelete(t *testing.T) {
 		if !os.IsNotExist(err) {
 			t.Fatal(err, siadir)
 		}
+	}
+}
+
+// TestCreateSiaDir tests the createSiaDir function
+func TestCreateSiaDir(t *testing.T) {
+	// Create test directory
+	testDir := tempDir(t.Name())
+
+	// Make a siadir on disk
+	err := createSiaDir(testDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Load the siadir from disk
+	var md siadir.Metadata
+	file, err := os.Open(filepath.Join(testDir, modules.SiaDirExtension))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bytes, err := ioutil.ReadAll(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(bytes, &md)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify metadata
+	if md.AggregateHealth != siadir.DefaultDirHealth {
+		t.Fatal("bad")
+	}
+	if md.AggregateMinRedundancy != siadir.DefaultDirRedundancy {
+		t.Fatal("bad")
+	}
+	if md.AggregateRemoteHealth != siadir.DefaultDirHealth {
+		t.Fatal("bad")
+	}
+	if md.AggregateStuckHealth != siadir.DefaultDirHealth {
+		t.Fatal("bad")
+	}
+	if md.Health != siadir.DefaultDirHealth {
+		t.Fatal("bad")
+	}
+	if md.MinRedundancy != siadir.DefaultDirRedundancy {
+		t.Fatal("bad")
+	}
+	if md.Mode != os.FileMode(modules.DefaultDirPerm) {
+		t.Fatal("bad")
+	}
+	if md.RemoteHealth != siadir.DefaultDirHealth {
+		t.Fatal("bad")
+	}
+	if md.StuckHealth != siadir.DefaultDirHealth {
+		t.Fatal("bad")
+	}
+
+	// Grab Mod Times
+	amt := md.AggregateModTime
+	mt := md.ModTime
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	md = siadir.Metadata{}
+
+	// verify a call to createSiaDir is a no-op
+	err = createSiaDir(testDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Load the File again and verify the times have not changed
+	file, err = os.Open(filepath.Join(testDir, modules.SiaDirExtension))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	bytes, err = ioutil.ReadAll(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(bytes, &md)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify Mod Times have not changed
+	if !mt.Equal(md.ModTime) {
+		t.Fatal("bad")
+	}
+	if !amt.Equal(md.AggregateModTime) {
+		t.Fatal("bad")
 	}
 }
