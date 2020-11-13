@@ -88,6 +88,8 @@ func main() {
 			println("error deleting dirs", err)
 			os.Exit(1)
 		}
+		println("Deletion Done")
+		return
 	default:
 		panic("Improper use")
 	}
