@@ -21,3 +21,4 @@ Lastly, you can take advantage of the empty directory deletion in the script by
 supplying `delete-only` as an argument. This will skip the renaming and just
 iterate over the filesystem and delete old empty directories.
 
+Use this gist to update the Renter after running the rename script https://gist.github.com/MSevey/4b7fa436124765e2b80f1851d3a08e1b
