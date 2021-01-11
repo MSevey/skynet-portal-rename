@@ -21,7 +21,7 @@ const (
 	//
 	// For Example, if dirDepth is 3 and dirLength is 2 we will get filepaths of
 	// the structure aa/aa/aa/filename
-	dirDepth  = 3
+	dirDepth  = 2
 	dirLength = 2
 )
 
@@ -85,10 +85,10 @@ func main() {
 		fmt.Println("Executing Delete Only")
 		err := deleteEmptyDirs("./fs/var/skynet")
 		if err != nil {
-			println("error deleting dirs", err)
+			fmt.Println("error deleting dirs", err)
 			os.Exit(1)
 		}
-		println("Deletion Done")
+		fmt.Println("Deletion Done")
 		return
 	default:
 		panic("Improper use")
@@ -97,26 +97,26 @@ func main() {
 	// Open file to track directory paths
 	f, err := os.OpenFile("dirpaths", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		println("error creating dirpath file", err)
+		fmt.Println("error creating dirpath file", err)
 		os.Exit(1)
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			println(err)
+			fmt.Println(err)
 		}
 	}()
 
 	// Rename Files
 	err = renameAll(f, "./fs/var/skynet")
 	if err != nil {
-		println("error renaming files", err)
+		fmt.Println("error renaming files", err)
 		os.Exit(1)
 	}
 
 	// Go back over the file system and delete any empty directories
 	err = deleteEmptyDirs("./fs/var/skynet")
 	if err != nil {
-		println("error deleting dirs", err)
+		fmt.Println("error deleting dirs", err)
 		os.Exit(1)
 	}
 }
@@ -168,6 +168,9 @@ func recurviseDelete(path string) error {
 			return errors.AddContext(err, fmt.Sprintf("unable to remove path %s", path))
 		}
 
+		// Make sure it is not in the dir map
+		delete(dirs, path)
+
 		// Get parent directory
 		path = filepath.Dir(path)
 	}
@@ -175,10 +178,10 @@ func recurviseDelete(path string) error {
 }
 
 // createSiaDir creates a siadir on disk if there is not one present
-func createSiaDir(dir string) error {
+func createSiaDir(dir string) (err error) {
 	path := filepath.Join(dir, modules.SiaDirExtension)
 	// Check for existing siadir
-	_, err := os.Stat(path)
+	_, err = os.Stat(path)
 	if !os.IsNotExist(err) {
 		return nil
 	}
@@ -209,7 +212,8 @@ func createSiaDir(dir string) error {
 	// Write the data to disk and sync
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0600)
 	if err != nil {
-		return err
+		str := fmt.Sprintf("unable to open siadir file to create metadata at %v", path)
+		return errors.AddContext(err, str)
 	}
 	defer func() {
 		err = errors.Compose(err, file.Close())
@@ -218,19 +222,26 @@ func createSiaDir(dir string) error {
 	// Write and sync.
 	n, err := file.Write(data)
 	if err != nil {
-		return err
+		str := fmt.Sprintf("unable to write to newly created siadir file at %v", path)
+		return errors.AddContext(err, str)
 	}
 	if n < len(data) {
-		return fmt.Errorf("write was only applied partially - %v / %v", n, len(data))
+		return fmt.Errorf("write was only applied partially at %v - %v / %v", path, n, len(data))
 	}
-	return file.Sync()
-
+	err = file.Sync()
+	if err != nil {
+		str := fmt.Sprintf("unable to sync siadir file at %v", path)
+		return errors.AddContext(err, str)
+	}
+	return nil
 }
 
 // renameAll will walk the filesystem and rename all files to create a directory
-// structure that follows a 2/2/2/26 pattern
+// structure that follows a pattern determined by the dirLength and dirDepth
 func renameAll(f *os.File, root string) error {
 	totalFiles := 0
+	skippedFiles := 0
+	renamedFiles := 0
 	// Loop over files and rename them
 	return filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
 		// Ignore non siafiles and dirs.
@@ -244,10 +255,13 @@ func renameAll(f *os.File, root string) error {
 		totalFiles++
 		if totalFiles%1000 == 0 {
 			println(totalFiles, "files handled")
+			println(skippedFiles, "files skipped")
+			println(renamedFiles, "files renamed")
 		}
 		// Ignore files already in the 2/2/2/<filename> structure
 		dirStructure := strings.TrimPrefix(path, root)
 		if validDirStructure(dirStructure) {
+			skippedFiles++
 			// Verify there is a siadir in this directory
 			dir := filepath.Dir(path)
 			return createSiaDir(dir)
@@ -297,11 +311,13 @@ func renameAll(f *os.File, root string) error {
 		if path == newPath {
 			return nil
 		}
+		renamedFiles++
 
 		// Copy the siafile
 		err = copyFile(path, newPath)
 		if err != nil {
-			return errors.AddContext(err, "copyFile  failed")
+			str := fmt.Sprintf("copyFile failed for %v", path)
+			return errors.AddContext(err, str)
 		}
 
 		// If there is not an extended file we are done
@@ -310,20 +326,22 @@ func renameAll(f *os.File, root string) error {
 			return nil
 		}
 		if err != nil {
-			return errors.AddContext(err, "os.Stat for extended failed")
+			str := fmt.Sprintf("os.Stat for extended failed for %v", oldPathExtended)
+			return errors.AddContext(err, str)
 		}
 
 		// Copy the extended file
 		err = copyFile(oldPathExtended, newPathExtended)
 		if err != nil {
-			return errors.AddContext(err, "copyFile for extended failed")
+			str := fmt.Sprintf("copyFile for extended failed for %v", oldPathExtended)
+			return errors.AddContext(err, str)
 		}
 		return nil
 	})
 }
 
 // validDirStructure returns a boolean indicating if the path is of the
-// structure /2/2/2/<filename>.
+// structure defined by dirLength and dirDepth.
 func validDirStructure(path string) bool {
 	// Check for directory
 	dir, file := filepath.Split(path)
