@@ -146,11 +146,16 @@ func TestValidDirStructure(t *testing.T) {
 		{"/name", false},
 		{"/a/a/a/a/a/a/name", false},
 		{"/aa/aa/aa/name/", false},
-		{"/aa/aa/aa/name", true},
-		{"./aa/aa/aa/name", true},
-		{"aa/aa/aa/name", true},
-		{"//////aa/aa/aa/name", true},
-		{"/aa/aa//////aa/name", true},
+		// {"/aa/aa/aa/name", true},
+		// {"./aa/aa/aa/name", true},
+		// {"aa/aa/aa/name", true},
+		// {"//////aa/aa/aa/name", true},
+		// {"/aa/aa//////aa/name", true},
+		{"/aa/aa/name", true},
+		{"./aa/aa/name", true},
+		{"aa/aa/name", true},
+		{"//////aa/aa/name", true},
+		{"/aa//////aa/name", true},
 	}
 	for _, test := range tests {
 		if test.valid != validDirStructure(test.path) {
@@ -180,7 +185,7 @@ func TestRenameAllAndDelete(t *testing.T) {
 		filepath.Join(fileDir, "a/.siadir"),
 		filepath.Join(fileDir, "a/a/a/.siadir"),
 	}
-	goodFile := filepath.Join(fileDir, "bb/bb/bb/file.sia")
+	goodFile := filepath.Join(fileDir, "bb/bb/file.sia")
 	err := os.MkdirAll(filepath.Dir(goodFile), persist.DefaultDiskPermissionsTest)
 	if err != nil {
 		t.Fatal(err)

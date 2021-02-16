@@ -19,8 +19,8 @@ import (
 const (
 	// dirDepth and dirLength are used to define the desired filesystem structure.
 	//
-	// For Example, if dirDepth is 3 and dirLength is 2 we will get filepaths of
-	// the structure aa/aa/aa/filename
+	// For Example, if dirDepth is 2 and dirLength is 2 we will get filepaths of
+	// the structure aa/aa/filename
 	dirDepth  = 2
 	dirLength = 2
 )
